@@ -5,7 +5,9 @@ import * as THREE from 'three';
 export const RIM_CENTER = new THREE.Vector3(0, 10, -13.75);
 export const RIM_RADIUS = 0.75;
 export const BALL_RADIUS = 0.4;
-export const RELEASE_POINT = new THREE.Vector3(0, 6.3, -0.6);
+// Just in front of and below the camera so the held ball reads as "in your
+// hands" at the bottom of the frame instead of floating mid-court.
+export const RELEASE_POINT = new THREE.Vector3(1.9, 4.5, 3.3);
 
 export function buildCourt(scene: THREE.Scene): void {
   // Floor
@@ -78,6 +80,39 @@ export function buildCourt(scene: THREE.Scene): void {
   net.position.set(RIM_CENTER.x, RIM_CENTER.y - 0.8, RIM_CENTER.z);
   scene.add(net);
 
+  // Arena backdrop — a crowd wall so the upper frame isn't empty void.
+  const wallCanvas = document.createElement('canvas');
+  wallCanvas.width = 1024; wallCanvas.height = 320;
+  const wctx = wallCanvas.getContext('2d')!;
+  const grad = wctx.createLinearGradient(0, 0, 0, 320);
+  grad.addColorStop(0, '#0c1730');
+  grad.addColorStop(1, '#16264a');
+  wctx.fillStyle = grad;
+  wctx.fillRect(0, 0, 1024, 320);
+  const crowdColors = ['#2a3d66', '#3c5488', '#24365c', '#4a5f92', '#1e2f52', '#5a6ea0'];
+  for (let row = 0; row < 9; row += 1) {
+    for (let i = 0; i < 120; i += 1) {
+      wctx.fillStyle = crowdColors[Math.floor(Math.random() * crowdColors.length)];
+      const px = i * 8.6 + (row % 2) * 4 + Math.random() * 2;
+      const py = 60 + row * 27 + Math.random() * 5;
+      wctx.beginPath();
+      wctx.arc(px, py, 2.6 + Math.random() * 1.4, 0, Math.PI * 2);
+      wctx.fill();
+    }
+  }
+  wctx.fillStyle = '#f4c84b';
+  wctx.font = '900 34px -apple-system, Helvetica, Arial, sans-serif';
+  wctx.textAlign = 'center';
+  wctx.fillText('d a t a b a l l r', 512, 38);
+  const wallTex = new THREE.CanvasTexture(wallCanvas);
+  wallTex.colorSpace = THREE.SRGBColorSpace;
+  const wall = new THREE.Mesh(
+    new THREE.PlaneGeometry(120, 34),
+    new THREE.MeshBasicMaterial({ map: wallTex }),
+  );
+  wall.position.set(0, 15, -36);
+  scene.add(wall);
+
   // Stanchion
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x30405f, roughness: 0.6 });
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 11.4, 10), poleMat);
@@ -118,8 +153,9 @@ export function buildFigure(scene: THREE.Scene, index: number): QueueFigure {
   return {
     group,
     setQueueSlot(slot: number) {
-      // Line up behind and to the right of the shooter at the FT line.
-      group.position.set(2.2 + (slot % 2) * 0.9, 0, 2.4 + slot * 1.9);
+      // Waiting line recedes up the right sideline so every figure stays in
+      // frame (never behind the camera).
+      group.position.set(4.3 + slot * 1.1, 0, -3.0 - slot * 2.4);
       group.visible = true;
     },
     setDead(dead: boolean) {

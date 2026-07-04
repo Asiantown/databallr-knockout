@@ -55,6 +55,8 @@ function flightTarget(result: ShotResult, from: THREE.Vector3): FlightTarget {
 type Phase = 'idle' | 'arc' | 'drop' | 'bounce' | 'settled';
 
 export interface BallEvents {
+  onArrive(result: ShotResult): void; // ball reached the rim/target (play swish/clank here)
+  onBounce(): void; // ball hit the floor during a miss bounce
   onMadeSettled(): void; // splash finished dropping through the net
   onMissSettled(position: THREE.Vector3): void; // bounce came to rest
 }
@@ -136,6 +138,7 @@ export class BallFlight {
         this.velocity.y = Math.abs(this.velocity.y) * 0.55;
         this.velocity.x *= 0.8;
         this.velocity.z *= 0.8;
+        if (this.velocity.y > 1.2) this.events.onBounce();
         if (this.velocity.length() < 2.2) {
           this.phase = 'settled';
           this.events.onMissSettled(this.mesh.position.clone());
@@ -147,6 +150,7 @@ export class BallFlight {
   private arriveAtTarget(): void {
     const result = this.result;
     if (!result) return;
+    this.events.onArrive(result);
     if (result.made) {
       this.phase = 'drop';
       this.mesh.position.set(RIM_CENTER.x, RIM_CENTER.y - 0.1, RIM_CENTER.z);

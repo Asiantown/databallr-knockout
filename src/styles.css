@@ -38,7 +38,8 @@ html, body {
   top: 14px; left: 18px; right: 18px;
   display: flex; justify-content: space-between; align-items: center;
 }
-#hud-title { font-weight: 850; font-size: 18px; letter-spacing: 0.02em; color: var(--ink); }
+#hud-title { font-weight: 850; font-size: 18px; letter-spacing: 0.02em; color: var(--ink); display: flex; align-items: center; gap: 10px; }
+#btn-mute { pointer-events: auto; background: rgba(13,26,53,0.85); border: 1px solid #263756; border-radius: 7px; font-size: 14px; padding: 3px 7px; cursor: pointer; }
 #hud-title span { color: var(--gold); }
 #hud-alive { font-weight: 800; font-size: 15px; color: var(--muted); }
 #hud-alive b { color: var(--ink); }
@@ -82,12 +83,22 @@ html, body {
 
 #hud-status {
   position: absolute;
-  bottom: 118px; left: 0; right: 0;
+  bottom: 118px; left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, 88vw);
   text-align: center;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--muted);
+  background: rgba(13, 26, 53, 0.85);
+  border: 1px solid #263756;
+  border-radius: 999px;
+  padding: 7px 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+#hud-status:empty { display: none; }
 #hud-status b { color: var(--ink); }
 
 #hud-meter {
@@ -99,7 +110,7 @@ html, body {
 }
 #meter-track {
   position: relative;
-  height: 14px;
+  height: 18px;
   background: rgba(13, 26, 53, 0.9);
   border: 1px solid #263756;
   border-radius: 7px;
@@ -107,7 +118,7 @@ html, body {
 }
 #meter-band {
   position: absolute; top: 0; bottom: 0;
-  background: rgba(52, 211, 153, 0.33);
+  background: rgba(52, 211, 153, 0.45);
   border-left: 1px solid var(--green);
   border-right: 1px solid var(--green);
 }

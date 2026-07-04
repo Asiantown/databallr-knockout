@@ -6,11 +6,16 @@
 // The user's ball is the only one rendered in 3D; every AI race is legible
 // through the HUD line (statuses tick in real time). AI make/miss odds are the
 // shooters' REAL career FT% — that's the databallr hook.
+//
+// Message discipline (UX): the big center text belongs to the USER's moments
+// (your result, YOUR BALL, eliminations, the win). AI makes only touch the
+// side rail — they never talk over your shot.
 import * as THREE from 'three';
-import { BallFlight, resolveShot } from './shot';
+import { BallFlight, resolveShot, ShotResult } from './shot';
 import { RELEASE_POINT, RIM_CENTER, buildFigure, QueueFigure } from './court';
 import { FlickInput } from './input';
 import { Hud } from './hud';
+import { Sfx } from './sfx';
 import { Shooter, bandHalfwidth, pickOpponents } from './shooters';
 
 type PlayerPhase = 'idle' | 'aiming' | 'flight' | 'rebounding' | 'putback';
@@ -27,33 +32,60 @@ interface Player {
   figure: QueueFigure | null;
 }
 
+export interface GameStateSnapshot {
+  userPhase: PlayerPhase;
+  over: boolean;
+  alive: number;
+  total: number;
+  queue: string[];
+  lastPower: number | null;
+  lastOutcome: string | null;
+}
+
 const PUTBACK_BAND_MULT = 1.9;
 const PUTBACK_ODDS_BONUS = 0.28;
+
+const MISS_LABELS: Record<string, string> = {
+  short: 'FRONT RIM',
+  long: 'BACK IRON',
+  rim_out: 'RIMS OUT',
+  airball: 'AIRBALL',
+};
 
 export class KnockoutGame {
   private players: Player[] = [];
   private queue: Player[] = [];
   private hud: Hud;
+  private sfx: Sfx;
   private ball: BallFlight;
   private input: FlickInput;
   private clock = 0;
   private over = false;
   private totalPlayers: number;
   private userPutbackFrom: THREE.Vector3 | null = null;
+  private lastResult: ShotResult | null = null;
+  private lastPower: number | null = null;
 
-  constructor(scene: THREE.Scene, hud: Hud, userShooter: Shooter, opponentCount: number) {
+  constructor(scene: THREE.Scene, hud: Hud, sfx: Sfx, userShooter: Shooter, opponentCount: number) {
     this.hud = hud;
+    this.sfx = sfx;
     this.ball = new BallFlight(scene, {
-      onMadeSettled: () => this.userShotFinished(true),
+      onArrive: (result) => {
+        if (result.made) this.sfx.swish();
+        else if (result.outcome !== 'airball') this.sfx.rim();
+      },
+      onBounce: () => this.sfx.bounce(),
+      onMadeSettled: () => this.userShotFinished(),
       onMissSettled: (pos) => this.userMissSettled(pos),
     });
     this.input = new FlickInput(
       (flick) => this.userFlick(flick.power),
       (power) => this.hud.meterFill(power),
+      () => this.hud.message('TOO SOFT — FLICK FASTER', true, 900),
     );
 
     const user: Player = {
-      name: `You (${userShooter.name})`,
+      name: `You · ${lastName(userShooter.name)}`,
       ft: userShooter.ft,
       isUser: true,
       alive: true,
@@ -82,6 +114,19 @@ export class KnockoutGame {
 
     this.assignBalls();
     this.refreshHud();
+  }
+
+  snapshot(): GameStateSnapshot {
+    const user = this.userPlayer();
+    return {
+      userPhase: user?.phase ?? 'idle',
+      over: this.over,
+      alive: this.queue.length,
+      total: this.totalPlayers,
+      queue: this.queue.map((p) => p.name),
+      lastPower: this.lastPower,
+      lastOutcome: this.lastResult?.outcome ?? null,
+    };
   }
 
   update(dt: number): void {
@@ -123,8 +168,12 @@ export class KnockoutGame {
       this.ball.holdAt(RELEASE_POINT);
       this.input.setEnabled(true);
       this.hud.meterBand(bandHalfwidth(player.ft));
-      this.hud.meterLabel('flick up to shoot — free throw');
-      this.hud.status(`<b>Your ball.</b> Land the flick in the green window (${Math.round(player.ft * 100)}% FT).`);
+      this.hud.meterLabel('free throw — flick · swipe · hold space');
+      this.hud.message('YOUR BALL', false, 900);
+      this.sfx.yourBall();
+      const chaser = this.holders().find((p) => p !== player);
+      const pressure = chaser && !chaser.isUser ? ` ${lastName(chaser.name)} is shooting behind you.` : '';
+      this.hud.status(`<b>Your ball.</b> Green window = ${Math.round(player.ft * 100)}% FT.${pressure}`);
     } else {
       player.phase = 'aiming';
       player.timer = 1.8 + Math.random() * 1.4;
@@ -145,7 +194,8 @@ export class KnockoutGame {
         this.input.setEnabled(true);
         this.hud.meterBand(bandHalfwidth(player.ft) * PUTBACK_BAND_MULT);
         this.hud.meterLabel('PUTBACK — quick flick!');
-        this.hud.status('<b>Putback!</b> Close range — bigger window. Flick!');
+        this.hud.status('<b>Putback!</b> Close range — bigger window.');
+        this.refreshHud();
       }
     }
   }
@@ -158,21 +208,22 @@ export class KnockoutGame {
     const band = bandHalfwidth(user.ft) * (isPutback ? PUTBACK_BAND_MULT : 1);
     const result = resolveShot(power, band);
     const from = isPutback && this.userPutbackFrom ? this.userPutbackFrom : RELEASE_POINT;
+    this.lastResult = result;
+    this.lastPower = power;
     user.phase = 'flight';
     user.status = 'ball in air';
     this.input.setEnabled(false);
     this.hud.meterTick(power);
     this.ball.launch(from.clone(), result);
     this.hud.meterFill(0);
+    this.refreshHud();
   }
 
-  private userShotFinished(made: boolean): void {
+  private userShotFinished(): void {
     const user = this.userPlayer();
     if (!user || !user.alive || this.over) return;
-    if (made) {
-      this.hud.message('SPLASH!');
-      this.handleMake(user);
-    }
+    this.hud.message('SPLASH!');
+    this.handleMake(user);
   }
 
   private userMissSettled(position: THREE.Vector3): void {
@@ -182,8 +233,10 @@ export class KnockoutGame {
     user.phase = 'rebounding';
     user.timer = 0.5 + runDistance * 0.09;
     user.status = 'chasing board…';
-    this.hud.message('OFF THE RIM', true, 700);
+    const label = MISS_LABELS[this.lastResult?.outcome ?? ''] ?? 'NO GOOD';
+    this.hud.message(label, true, 800);
     this.hud.status('Chasing the rebound…');
+    this.refreshHud();
     // Putback spot: pulled toward the basket from wherever the ball settled.
     this.userPutbackFrom = new THREE.Vector3(
       THREE.MathUtils.clamp(position.x, -4, 4),
@@ -237,7 +290,7 @@ export class KnockoutGame {
       other.possessionStart !== null &&
       maker.possessionStart > other.possessionStart
     ) {
-      this.eliminate(other, maker);
+      this.eliminate(other);
       if (this.over) return;
     }
 
@@ -245,28 +298,27 @@ export class KnockoutGame {
     maker.possessionStart = null;
     maker.phase = 'idle';
     maker.status = 'in line';
-    if (!maker.isUser) {
-      maker.timer = 0;
-    } else {
+    if (maker.isUser) {
       this.input.setEnabled(false);
       this.ball.hide();
       this.hud.meterTick(null);
-      this.hud.meterLabel('in line — waiting for the ball');
-      this.hud.status('Made it. Back of the line — watch the race.');
+      this.hud.meterLabel('in line — the ball comes back when someone scores');
+      this.hud.status('Made it. Watch the race — you shoot again soon.');
+    } else {
+      maker.timer = 0;
     }
     const idx = this.queue.indexOf(maker);
     if (idx >= 0) {
       this.queue.splice(idx, 1);
       this.queue.push(maker);
     }
-    if (!maker.isUser) this.hud.message(`${shortName(maker.name)} scores`, false, 800);
 
     this.assignBalls();
     this.refreshHud();
     this.checkWin();
   }
 
-  private eliminate(victim: Player, by: Player): void {
+  private eliminate(victim: Player): void {
     victim.alive = false;
     victim.possessionStart = null;
     victim.phase = 'idle';
@@ -275,18 +327,19 @@ export class KnockoutGame {
     const placement = this.queue.length;
     const idx = this.queue.indexOf(victim);
     if (idx >= 0) this.queue.splice(idx, 1);
+    this.sfx.knockout();
 
     if (victim.isUser) {
       this.over = true;
       this.input.setEnabled(false);
       this.ball.hide();
       this.hud.message('KNOCKED OUT', true, 2000);
-      this.hud.renderLine(this.lineEntries());
+      this.refreshHud();
       this.hud.showGameOver(false, placement, this.totalPlayers);
       return;
     }
-    this.hud.message(`${shortName(victim.name)} is OUT`, true, 1000);
-    void by;
+    this.hud.message(`${lastName(victim.name)} IS OUT`, true, 1000);
+    this.refreshHud();
   }
 
   private checkWin(): void {
@@ -296,7 +349,9 @@ export class KnockoutGame {
     this.over = true;
     const winner = this.queue[0];
     this.input.setEnabled(false);
+    this.refreshHud();
     if (winner.isUser) {
+      this.sfx.champion();
       this.hud.message('CHAMPION!', false, 2500);
       this.hud.showGameOver(true, 1, this.totalPlayers);
     } else {
@@ -316,8 +371,8 @@ export class KnockoutGame {
         continue;
       }
       if (holders.includes(player)) {
-        // AI shooters stand to the left of the user's spot at the line.
-        player.figure.group.position.set(-3.4 - aiHolderSlot * 1.7, 0, 0.4 + aiHolderSlot * 0.8);
+        // AI shooters stand at the line to your left, fully in frame.
+        player.figure.group.position.set(-4.8 - aiHolderSlot * 1.9, 0, -3.6 + aiHolderSlot * 1.2);
         aiHolderSlot += 1;
       } else {
         player.figure.setQueueSlot(lineSlot);
@@ -329,7 +384,7 @@ export class KnockoutGame {
   private lineEntries() {
     const holders = this.holders();
     const inQueue = this.queue.map((p) => ({
-      name: p.isUser ? p.name : p.name,
+      name: p.name,
       ft: p.ft,
       isUser: p.isUser,
       alive: p.alive,
@@ -352,7 +407,7 @@ export class KnockoutGame {
   }
 }
 
-function shortName(name: string): string {
+function lastName(name: string): string {
   const parts = name.split(' ');
   return parts.length > 1 ? parts[parts.length - 1] : name;
 }
