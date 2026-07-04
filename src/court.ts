@@ -125,9 +125,14 @@ export function buildCourt(scene: THREE.Scene): void {
 }
 
 // Simple capsule figures for the queue of opponents behind the FT line.
+// Figures GLIDE to targets (walk to the line, sprint to rebounds, jog to the
+// back of the queue) so the knockout race is physically visible.
 export interface QueueFigure {
   group: THREE.Group;
   setQueueSlot(slot: number): void;
+  setTarget(target: THREE.Vector3, speed: number): void;
+  atTarget(): boolean;
+  update(dt: number): void;
   setDead(dead: boolean): void;
 }
 
@@ -150,16 +155,52 @@ export function buildFigure(scene: THREE.Scene, index: number): QueueFigure {
   head.castShadow = true;
   group.add(body, head);
   scene.add(group);
-  return {
+  const target = new THREE.Vector3();
+  let speed = 0;
+  let moving = false;
+  const figure: QueueFigure = {
     group,
     setQueueSlot(slot: number) {
       // Waiting line recedes up the right sideline so every figure stays in
       // frame (never behind the camera).
-      group.position.set(4.3 + slot * 1.1, 0, -3.0 - slot * 2.4);
+      figure.setTarget(new THREE.Vector3(4.3 + slot * 1.1, 0, -3.0 - slot * 2.4), WALK_SPEED);
       group.visible = true;
+    },
+    setTarget(next: THREE.Vector3, moveSpeed: number) {
+      target.set(next.x, 0, next.z);
+      speed = moveSpeed;
+      moving = true;
+    },
+    atTarget() {
+      return !moving;
+    },
+    update(dt: number) {
+      if (!moving) return;
+      const to = target.clone().sub(group.position);
+      to.y = 0;
+      const dist = to.length();
+      const step = speed * dt;
+      if (dist <= step) {
+        group.position.set(target.x, 0, target.z);
+        moving = false;
+        return;
+      }
+      group.position.addScaledVector(to.normalize(), step);
+      // little run bob
+      group.position.y = Math.abs(Math.sin(performance.now() / 90)) * 0.14;
     },
     setDead(dead: boolean) {
       if (dead) group.visible = false;
     },
   };
+  // Spawn straight onto the first queue layout without gliding from origin.
+  group.position.set(4.3 + index * 1.1, 0, -3.0 - index * 2.4);
+  return figure;
 }
+
+export const WALK_SPEED = 6;
+export const RUN_SPEED = 11;
+
+// Where AI holders stand to shoot: chaser/leader spots flanking the FT line,
+// both fully in frame.
+export const AI_SHOOT_SPOTS = [new THREE.Vector3(-3.4, 0, -1.6), new THREE.Vector3(3.3, 0, -1.2)];

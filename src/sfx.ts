@@ -76,17 +76,17 @@ export class Sfx {
     src.start(t0);
   }
 
-  swish(): void {
-    this.noise(0.28, 2400, 700, 0.22);
+  swish(volume = 1): void {
+    this.noise(0.28, 2400, 700, 0.22 * volume);
   }
 
-  rim(): void {
-    this.tone(210, 0.16, 'square', 0.16);
-    this.tone(316, 0.11, 'square', 0.1, 0.012);
+  rim(volume = 1): void {
+    this.tone(210, 0.16, 'square', 0.16 * volume);
+    this.tone(316, 0.11, 'square', 0.1 * volume, 0.012);
   }
 
-  bounce(): void {
-    this.tone(95, 0.12, 'sine', 0.2, 0, 55);
+  bounce(volume = 1): void {
+    this.tone(95, 0.12, 'sine', 0.2 * volume, 0, 55);
   }
 
   yourBall(): void {

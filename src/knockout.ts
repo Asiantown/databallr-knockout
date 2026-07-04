@@ -3,16 +3,18 @@
 // scores before you do, you're out. Make your shot -> pass the ball on and
 // rejoin the back of the line. Last one standing wins.
 //
-// The user's ball is the only one rendered in 3D; every AI race is legible
-// through the HUD line (statuses tick in real time). AI make/miss odds are the
-// shooters' REAL career FT% — that's the databallr hook.
+// The race is PHYSICAL: AI holders walk to their spot at the line, dribble,
+// launch a real ball at the same rim, chase their own rebounds, and jog to the
+// back of the queue after a make. AI accuracy isn't hidden dice — every AI
+// shot is a noisy "flick" resolved through the same power-band physics the
+// user plays, with the band set by their REAL career FT% (the databallr hook).
 //
 // Message discipline (UX): the big center text belongs to the USER's moments
-// (your result, YOUR BALL, eliminations, the win). AI makes only touch the
-// side rail — they never talk over your shot.
+// (your result, YOUR BALL, eliminations, the win). AI play is visible in the
+// world and ticks in the side rail — it never talks over your shot.
 import * as THREE from 'three';
 import { BallFlight, resolveShot, ShotResult } from './shot';
-import { RELEASE_POINT, RIM_CENTER, buildFigure, QueueFigure } from './court';
+import { AI_SHOOT_SPOTS, RELEASE_POINT, RIM_CENTER, RUN_SPEED, WALK_SPEED, buildFigure, QueueFigure } from './court';
 import { FlickInput } from './input';
 import { Hud } from './hud';
 import { Sfx } from './sfx';
@@ -30,6 +32,8 @@ interface Player {
   possessionStart: number | null;
   status: string;
   figure: QueueFigure | null;
+  ball: BallFlight | null;
+  isPutback: boolean;
 }
 
 export interface GameStateSnapshot {
@@ -43,7 +47,8 @@ export interface GameStateSnapshot {
 }
 
 const PUTBACK_BAND_MULT = 1.9;
-const PUTBACK_ODDS_BONUS = 0.28;
+const AI_FLICK_SIGMA = 0.1; // wrist noise; make rate then emerges from the FT% band
+const AI_VOLUME = 0.35;
 
 const MISS_LABELS: Record<string, string> = {
   short: 'FRONT RIM',
@@ -52,12 +57,21 @@ const MISS_LABELS: Record<string, string> = {
   airball: 'AIRBALL',
 };
 
+function gauss(): number {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
 export class KnockoutGame {
   private players: Player[] = [];
   private queue: Player[] = [];
   private hud: Hud;
   private sfx: Sfx;
-  private ball: BallFlight;
+  private scene: THREE.Scene;
+  private ball: BallFlight; // the user's ball
   private input: FlickInput;
   private clock = 0;
   private over = false;
@@ -69,6 +83,7 @@ export class KnockoutGame {
   constructor(scene: THREE.Scene, hud: Hud, sfx: Sfx, userShooter: Shooter, opponentCount: number) {
     this.hud = hud;
     this.sfx = sfx;
+    this.scene = scene;
     this.ball = new BallFlight(scene, {
       onArrive: (result) => {
         if (result.made) this.sfx.swish();
@@ -94,6 +109,8 @@ export class KnockoutGame {
       possessionStart: null,
       status: 'in line',
       figure: null,
+      ball: null,
+      isPutback: false,
     };
     const ais = pickOpponents(opponentCount, userShooter.name).map((s, i): Player => ({
       name: s.name,
@@ -105,6 +122,8 @@ export class KnockoutGame {
       possessionStart: null,
       status: 'in line',
       figure: buildFigure(scene, i),
+      ball: null,
+      isPutback: false,
     }));
 
     // User starts second in line (chaser) so the pressure is on immediately.
@@ -133,14 +152,12 @@ export class KnockoutGame {
     if (this.over) return;
     this.clock += dt;
     this.ball.update(dt);
-
     for (const player of this.players) {
+      player.figure?.update(dt);
+      player.ball?.update(dt);
       if (!player.alive || player.possessionStart === null) continue;
-      if (player.isUser) {
-        this.updateUser(player, dt);
-      } else {
-        this.updateAi(player, dt);
-      }
+      if (player.isUser) this.updateUser(player, dt);
+      else this.updateAi(player, dt);
     }
   }
 
@@ -160,7 +177,31 @@ export class KnockoutGame {
     this.positionFigures();
   }
 
+  private aiBall(player: Player): BallFlight {
+    if (!player.ball) {
+      player.ball = new BallFlight(this.scene, {
+        onArrive: (result) => {
+          if (result.made) this.sfx.swish(AI_VOLUME);
+          else if (result.outcome !== 'airball') this.sfx.rim(AI_VOLUME);
+        },
+        onBounce: () => this.sfx.bounce(AI_VOLUME),
+        onMadeSettled: () => {
+          if (player.alive && !this.over) this.handleMake(player);
+        },
+        onMissSettled: (pos) => {
+          if (!player.alive || this.over || player.possessionStart === null) return;
+          player.phase = 'rebounding';
+          player.status = 'chasing board…';
+          player.figure?.setTarget(pos, RUN_SPEED);
+          this.refreshHud();
+        },
+      });
+    }
+    return player.ball;
+  }
+
   private startAttempt(player: Player): void {
+    player.isPutback = false;
     if (player.isUser) {
       player.phase = 'aiming';
       player.status = 'shooting…';
@@ -171,13 +212,21 @@ export class KnockoutGame {
       this.hud.meterLabel('free throw — flick · swipe · hold space');
       this.hud.message('YOUR BALL', false, 900);
       this.sfx.yourBall();
-      const chaser = this.holders().find((p) => p !== player);
-      const pressure = chaser && !chaser.isUser ? ` ${lastName(chaser.name)} is shooting behind you.` : '';
+      const other = this.holders().find((p) => p !== player && p.possessionStart !== null);
+      const otherStart = other?.possessionStart;
+      const myStart = player.possessionStart;
+      let pressure = '';
+      if (other && !other.isUser && otherStart !== null && otherStart !== undefined && myStart !== null) {
+        pressure = otherStart < myStart
+          ? ` Score before ${lastName(other.name)} to knock him out!`
+          : ` ${lastName(other.name)} is shooting behind you.`;
+      }
       this.hud.status(`<b>Your ball.</b> Green window = ${Math.round(player.ft * 100)}% FT.${pressure}`);
     } else {
       player.phase = 'aiming';
-      player.timer = 1.8 + Math.random() * 1.4;
+      player.timer = 1.9 + Math.random() * 1.5;
       player.status = 'shooting…';
+      this.aiBall(player); // ensure the ball exists; it renders during the dribble
     }
   }
 
@@ -245,35 +294,73 @@ export class KnockoutGame {
     );
   }
 
-  // --- AI flow --------------------------------------------------------------------
+  // --- AI flow: visible, physical, same shot physics as the user ------------------
 
   private updateAi(player: Player, dt: number): void {
-    player.timer -= dt;
-    if (player.timer > 0) return;
+    const figure = player.figure;
+    if (!figure) return;
+
     if (player.phase === 'aiming') {
-      if (Math.random() < player.ft) {
-        this.handleMake(player);
-      } else {
-        player.phase = 'rebounding';
-        player.timer = 1.6 + Math.random() * 1.2;
-        player.status = 'chasing board…';
-        this.refreshHud();
+      // Walk to the spot first (carrying the ball), then dribble and shoot.
+      if (!figure.atTarget()) {
+        this.carry(player);
+        return;
       }
-    } else if (player.phase === 'rebounding') {
+      this.dribble(player);
+      player.timer -= dt;
+      if (player.timer > 0) return;
+      this.aiLaunch(player);
+      return;
+    }
+
+    if (player.phase === 'rebounding') {
+      if (!figure.atTarget()) return;
       player.phase = 'putback';
-      player.timer = 0.7 + Math.random() * 0.6;
+      player.timer = 0.35 + Math.random() * 0.3;
       player.status = 'putback…';
       this.refreshHud();
-    } else if (player.phase === 'putback') {
-      if (Math.random() < Math.min(0.95, player.ft + PUTBACK_ODDS_BONUS)) {
-        this.handleMake(player);
-      } else {
-        player.phase = 'rebounding';
-        player.timer = 1.2 + Math.random() * 1.0;
-        player.status = 'chasing board…';
-        this.refreshHud();
-      }
+      return;
     }
+
+    if (player.phase === 'putback') {
+      this.dribble(player);
+      player.timer -= dt;
+      if (player.timer > 0) return;
+      player.isPutback = true;
+      this.aiLaunch(player);
+    }
+  }
+
+  private carry(player: Player): void {
+    const figure = player.figure;
+    const ball = player.ball;
+    if (!figure || !ball) return;
+    const base = figure.group.position;
+    ball.holdAt(new THREE.Vector3(base.x + 0.7, 2.9, base.z + 0.3));
+  }
+
+  private dribble(player: Player): void {
+    const figure = player.figure;
+    const ball = player.ball;
+    if (!figure || !ball) return;
+    const base = figure.group.position;
+    const bob = Math.abs(Math.sin(performance.now() / 140));
+    ball.holdAt(new THREE.Vector3(base.x + 0.75, 0.5 + bob * 2.6, base.z + 0.2));
+  }
+
+  private aiLaunch(player: Player): void {
+    const figure = player.figure;
+    if (!figure) return;
+    const band = bandHalfwidth(player.ft) * (player.isPutback ? PUTBACK_BAND_MULT : 1);
+    const power = 1 + gauss() * AI_FLICK_SIGMA;
+    const result = resolveShot(power, band);
+    const from = figure.group.position.clone();
+    from.y = 6.0;
+    from.z -= 0.5;
+    player.phase = 'flight';
+    player.status = 'ball in air';
+    this.aiBall(player).launch(from, result);
+    this.refreshHud();
   }
 
   // --- knockout rules ---------------------------------------------------------------
@@ -298,14 +385,13 @@ export class KnockoutGame {
     maker.possessionStart = null;
     maker.phase = 'idle';
     maker.status = 'in line';
+    maker.ball?.hide();
     if (maker.isUser) {
       this.input.setEnabled(false);
       this.ball.hide();
       this.hud.meterTick(null);
       this.hud.meterLabel('in line — the ball comes back when someone scores');
       this.hud.status('Made it. Watch the race — you shoot again soon.');
-    } else {
-      maker.timer = 0;
     }
     const idx = this.queue.indexOf(maker);
     if (idx >= 0) {
@@ -323,6 +409,7 @@ export class KnockoutGame {
     victim.possessionStart = null;
     victim.phase = 'idle';
     victim.status = 'OUT';
+    victim.ball?.hide();
     victim.figure?.setDead(true);
     const placement = this.queue.length;
     const idx = this.queue.indexOf(victim);
@@ -371,8 +458,9 @@ export class KnockoutGame {
         continue;
       }
       if (holders.includes(player)) {
-        // AI shooters stand at the line to your left, fully in frame.
-        player.figure.group.position.set(-4.8 - aiHolderSlot * 1.9, 0, -3.6 + aiHolderSlot * 1.2);
+        // AI shooters walk to their spot flanking the FT line.
+        const spot = AI_SHOOT_SPOTS[Math.min(aiHolderSlot, AI_SHOOT_SPOTS.length - 1)];
+        player.figure.setTarget(spot, WALK_SPEED);
         aiHolderSlot += 1;
       } else {
         player.figure.setQueueSlot(lineSlot);

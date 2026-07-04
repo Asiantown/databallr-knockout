@@ -81,6 +81,7 @@ export class BallFlight {
       new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }),
     );
     this.mesh.castShadow = true;
+    this.mesh.visible = false; // hidden until first holdAt/launch (no origin flash)
     scene.add(this.mesh);
   }
 
