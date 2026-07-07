@@ -2,3 +2,10 @@ node_modules
 dist
 test-results
 playwright-report
+artifacts
+
+# Secrets — asset-generation API keys. NEVER commit. Build-time only.
+.env
+.env.local
+# Raw generation working dir (downloaded meshes before optimize/commit)
+scripts/assetgen/.cache

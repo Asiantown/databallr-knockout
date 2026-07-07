@@ -5,6 +5,7 @@
 // arcade triggers, no physics engine.
 import * as THREE from 'three';
 import { BALL_RADIUS, RIM_CENTER, RIM_RADIUS } from './court';
+import { makeBall } from './characters';
 
 export type Outcome = 'splash' | 'rim_in' | 'rim_out' | 'short' | 'long' | 'airball';
 
@@ -62,7 +63,7 @@ export interface BallEvents {
 }
 
 export class BallFlight {
-  readonly mesh: THREE.Mesh;
+  readonly mesh: THREE.Object3D;
   private phase: Phase = 'idle';
   private from = new THREE.Vector3();
   private target = new THREE.Vector3();
@@ -75,12 +76,18 @@ export class BallFlight {
 
   constructor(scene: THREE.Scene, events: BallEvents) {
     this.events = events;
-    const tex = makeBallTexture();
-    this.mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(BALL_RADIUS, 20, 16),
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }),
-    );
-    this.mesh.castShadow = true;
+    const model = makeBall();
+    if (model) {
+      this.mesh = model;
+      this.mesh.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.castShadow = true; });
+    } else {
+      const tex = makeBallTexture();
+      this.mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(BALL_RADIUS, 20, 16),
+        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }),
+      );
+      this.mesh.castShadow = true;
+    }
     this.mesh.visible = false; // hidden until first holdAt/launch (no origin flash)
     scene.add(this.mesh);
   }

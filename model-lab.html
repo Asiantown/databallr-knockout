@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- DEV TOOL (not shipped — Vite build only bundles index.html). Inspect a
+     generated GLB: /model-lab.html?m=player_a -->
+<html>
+<head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#0a1428;overflow:hidden}</style></head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+
+const name = new URLSearchParams(location.search).get('m') || 'player_a';
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1428);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(3, 6, 4); scene.add(key);
+scene.add(new THREE.HemisphereLight(0xbdd4ff, 0x14213d, 0.6));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0x1a2b4d, roughness: 0.8 }));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
+
+let root = null;
+new GLTFLoader().load(`/models/${name}.glb`, (g) => {
+  root = g.scene;
+  // normalize to ~4 units tall, feet on ground
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const scale = 4 / Math.max(size.y, 0.001);
+  root.scale.setScalar(scale);
+  root.position.set(-center.x * scale, -box.min.y * scale, -center.z * scale);
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+  scene.add(root);
+  const b2 = new THREE.Box3().setFromObject(root);
+  const h = b2.getSize(new THREE.Vector3()).y;
+  camera.position.set(0, h * 0.55, h * 1.7);
+  camera.lookAt(0, h * 0.5, 0);
+  window.__LOADED__ = true;
+  window.__INFO__ = { size: [size.x, size.y, size.z], tris: countTris(root) };
+}, undefined, (e) => { window.__ERROR__ = String(e); });
+
+function countTris(o) { let n = 0; o.traverse((m) => { if (m.isMesh && m.geometry) { const g = m.geometry; n += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return Math.round(n); }
+
+let angle = 0;
+renderer.setAnimationLoop(() => {
+  if (root) { angle += 0.01; root.rotation.y = angle; }
+  renderer.render(scene, camera);
+});
+window.__SPIN__ = (a) => { if (root) { root.rotation.y = a; renderer.render(scene, camera); } };
+</script>
+</body>
+</html>
