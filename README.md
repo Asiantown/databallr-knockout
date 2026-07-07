@@ -12,10 +12,14 @@ Your make window is your player's **real career FT%** — shoot as Curry (91%) a
 
 Classic playground knockout: the front two in line have balls. **If the person behind you scores before you do, you're out.** Make it → pass the ball on, rejoin the back. Last one standing wins.
 
-Shoot three ways:
+Shoot four ways:
 - **Flick up** — quick upward drag with mouse or finger
 - **Two-finger trackpad swipe** — either direction, speed = power
 - **Hold SPACE, release** — charge meter (keyboard / accessibility)
+- **📷 Wrist flick (webcam)** — tap the camera button (top-left) and shoot with a
+  real upward hand flick. MediaPipe hand tracking; peak flick speed → power. A
+  live preview shows the tracked hand + a power bar. Fully opt-in; swipe/space
+  stay active as fallback.
 
 Miss and the ball caroms off the rim — chase the board and hit the **putback** (bigger window, close range). Watch the chaser behind you: they walk up, dribble, and fire at the same rim in real time.
 
