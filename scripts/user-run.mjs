@@ -3,6 +3,7 @@
 //   node scripts/user-run.mjs [--url http://127.0.0.1:5188] [--mobile]
 import { chromium, devices } from '@playwright/test';
 import fs from 'node:fs';
+import { cdpShot } from './cdpshot.mjs';
 
 const url = process.argv.includes('--url')
   ? process.argv[process.argv.indexOf('--url') + 1]
@@ -21,7 +22,7 @@ const pageErrors = [];
 page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 page.on('pageerror', (e) => pageErrors.push(String(e)));
 
-const shot = async (name) => page.screenshot({ path: `${outDir}/${name}.png` });
+const shot = async (name) => cdpShot(page, `${outDir}/${name}.png`);
 const state = async () => page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.state?.() ?? null);
 
 await page.goto(url);

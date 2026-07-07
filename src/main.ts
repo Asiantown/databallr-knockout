@@ -21,7 +21,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -97,24 +97,40 @@ window.addEventListener('resize', () => {
 });
 
 let lastT = performance.now();
+let frameCount = 0;
 renderer.setAnimationLoop(() => {
   const now = performance.now();
   const dt = Math.min((now - lastT) / 1000, 0.05);
   lastT = now;
   game?.update(dt);
   composer.render();
+  frameCount += 1;
 });
 
 // Diagnostics hook for the QA harness (same convention as the jam repo).
+// Screenshotting a continuously-rendering WebGL+bloom canvas hangs Playwright's
+// actionability/font-wait, so the visual gate reads these render counters
+// instead — a stronger "the scene is actually drawing" signal that works in
+// every browser engine.
 declare global {
   interface Window {
-    __THREE_GAME_DIAGNOSTICS__?: { renderer: string; drawCalls: () => number };
+    __THREE_GAME_DIAGNOSTICS__?: {
+      renderer: string;
+      drawCalls: () => number;
+      geometries: () => number;
+      frames: () => number;
+    };
     __THREE_GAME_TEST_HOOKS__?: { state: () => unknown };
   }
 }
 window.__THREE_GAME_DIAGNOSTICS__ = {
   renderer: 'three@webgl',
+  // NB: renderer.info.render reflects only the LAST pass (the bloom/output
+  // fullscreen triangle), so it's not a scene-geometry signal. memory.geometries
+  // counts geometries resident on the GPU — a stable proxy for "scene is built".
   drawCalls: () => renderer.info.render.calls,
+  geometries: () => renderer.info.memory.geometries,
+  frames: () => frameCount,
 };
 window.__THREE_GAME_TEST_HOOKS__ = {
   state: () => game?.snapshot() ?? null,
