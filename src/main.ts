@@ -87,11 +87,18 @@ const renderMute = () => { muteBtn.textContent = sfx.isMuted ? '\u{1F507}' : '\u
 renderMute();
 muteBtn.onclick = () => { sfx.toggleMute(); renderMute(); };
 
-// Webcam wrist-flick — opt-in. A sharp upward hand flick fires the shot; peak
-// speed → power. Swipe/space stay active as fallback the whole time.
+// Webcam wrist-flick — opt-in. A sharp upward hand flick fires the shot; flick
+// speed → power. Swipe/space stay active as fallback the whole time. While the
+// camera runs we drop the bloom pass + pixel ratio (camActive) to free the GPU
+// that MediaPipe's delegate needs, so the game stays smooth.
+let camActive = false;
 const handInput = new HandFlickInput(
   (power) => game?.shootAt(power),
   (msg) => { camBtn.classList.remove('on'); camBtn.title = msg; hud.message(msg, true, 1600); },
+  (active) => {
+    camActive = active;
+    renderer.setPixelRatio(active ? 1 : Math.min(window.devicePixelRatio, 2));
+  },
 );
 window.__HAND_INPUT__ = handInput;
 const camBtn = document.getElementById('btn-cam') as HTMLButtonElement;
@@ -128,7 +135,10 @@ renderer.setAnimationLoop(() => {
   lastT = now;
   game?.update(dt);
   updateEffects(dt);
-  composer.render();
+  // Skip the bloom composer while the camera runs — direct render frees the GPU
+  // for hand tracking (the scene still looks good without the highlight sheen).
+  if (camActive) renderer.render(scene, camera);
+  else composer.render();
   frameCount += 1;
 });
 
