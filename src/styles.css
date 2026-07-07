@@ -39,8 +39,30 @@ html, body {
   display: flex; justify-content: space-between; align-items: center;
 }
 #hud-title { font-weight: 850; font-size: 18px; letter-spacing: 0.02em; color: var(--ink); display: flex; align-items: center; gap: 10px; }
-#btn-mute { pointer-events: auto; background: rgba(13,26,53,0.85); border: 1px solid #263756; border-radius: 7px; font-size: 14px; padding: 3px 7px; cursor: pointer; }
+#btn-mute, #btn-cam { pointer-events: auto; background: rgba(13,26,53,0.85); border: 1px solid #263756; border-radius: 7px; font-size: 14px; padding: 3px 7px; cursor: pointer; }
+#btn-cam.on { border-color: var(--gold); background: #1b2c52; }
 #hud-title span { color: var(--gold); }
+
+.cam-preview {
+  position: absolute;
+  left: 14px; bottom: 92px;
+  width: 240px;
+  pointer-events: none;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--navy-deep);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.55);
+}
+.cam-preview canvas { display: block; width: 100%; height: auto; }
+.cam-status {
+  font-size: 11px; font-weight: 800; text-align: center; padding: 3px 4px;
+  color: var(--gold); background: rgba(13,26,53,0.92); letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .cam-preview { width: 150px; bottom: 150px; left: 8px; }
+}
 #hud-alive { font-weight: 800; font-size: 15px; color: var(--muted); }
 #hud-alive b { color: var(--ink); }
 

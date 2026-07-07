@@ -9,6 +9,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { buildCourt, RIM_CENTER } from './court';
 import { loadCharacters } from './characters';
 import { updateEffects } from './effects';
+import { HandFlickInput } from './handInput';
 import { Hud } from './hud';
 import { Sfx } from './sfx';
 import { KnockoutGame } from './knockout';
@@ -86,6 +87,28 @@ const renderMute = () => { muteBtn.textContent = sfx.isMuted ? '\u{1F507}' : '\u
 renderMute();
 muteBtn.onclick = () => { sfx.toggleMute(); renderMute(); };
 
+// Webcam wrist-flick — opt-in. A sharp upward hand flick fires the shot; peak
+// speed → power. Swipe/space stay active as fallback the whole time.
+const handInput = new HandFlickInput(
+  (power) => game?.shootAt(power),
+  (msg) => { camBtn.classList.remove('on'); camBtn.title = msg; hud.message(msg, true, 1600); },
+);
+window.__HAND_INPUT__ = handInput;
+const camBtn = document.getElementById('btn-cam') as HTMLButtonElement;
+camBtn.onclick = async () => {
+  if (handInput.active) {
+    handInput.disable();
+    camBtn.classList.remove('on');
+    camBtn.title = 'Wrist-flick: off';
+  } else {
+    camBtn.classList.add('on');
+    camBtn.title = 'Starting…';
+    const ok = await handInput.enable();
+    camBtn.title = ok ? 'Wrist-flick: on' : 'Wrist-flick unavailable';
+    if (!ok) camBtn.classList.remove('on');
+  }
+};
+
 hud.showStart((shooter, opponents) => {
   game = new KnockoutGame(scene, hud, sfx, shooter, opponents);
 });
@@ -123,6 +146,7 @@ declare global {
       frames: () => number;
     };
     __THREE_GAME_TEST_HOOKS__?: { state: () => unknown; shoot: (power: number) => void };
+    __HAND_INPUT__?: HandFlickInput;
   }
 }
 window.__THREE_GAME_DIAGNOSTICS__ = {
@@ -136,5 +160,5 @@ window.__THREE_GAME_DIAGNOSTICS__ = {
 };
 window.__THREE_GAME_TEST_HOOKS__ = {
   state: () => game?.snapshot() ?? null,
-  shoot: (power: number) => game?.testShoot(power),
+  shoot: (power: number) => game?.shootAt(power),
 };

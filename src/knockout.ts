@@ -136,10 +136,10 @@ export class KnockoutGame {
     this.refreshHud();
   }
 
-  // QA-only: fire the user's shot at an exact power (bypasses input timing,
-  // which is unreliable under headless software rendering). No effect unless the
-  // user is currently aiming/putback — same guard as a real flick.
-  testShoot(power: number): void {
+  // Fire the user's shot at an exact power. Used by the webcam wrist-flick input
+  // and by the QA harness. No effect unless the user is currently aiming/putback
+  // — same guard as a real flick.
+  shootAt(power: number): void {
     this.userFlick(power);
   }
 
