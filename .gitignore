@@ -9,3 +9,4 @@ artifacts
 .env.local
 # Raw generation working dir (downloaded meshes before optimize/commit)
 scripts/assetgen/.cache
+public/_flickcal.mp4

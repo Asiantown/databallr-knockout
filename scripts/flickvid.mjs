@@ -39,18 +39,21 @@ const log = await page.evaluate(() => window.__FLICK_LOG__ || []);
 await browser.close();
 
 // --- summary ---------------------------------------------------------------
-const withHand = log.length;
+const attempts = log.length;
+const handRows = log.filter((r) => r.has);
+const withHand = handRows.length;
+const vts = log.map((r) => r.vt).filter((v) => v != null);
+console.log(`detection attempts: ${attempts}  |  hand found: ${withHand} (${Math.round((withHand / Math.max(1, attempts)) * 100)}%)`);
+console.log(`video time advanced: ${Math.min(...vts).toFixed(2)}s → ${Math.max(...vts).toFixed(2)}s`);
 if (!withHand) {
-  console.log('frames with hand: 0 — MediaPipe found no hand in the clip.');
+  console.log('MediaPipe found no hand.');
   if (errs.length) console.log('errors:', JSON.stringify(errs.slice(0, 4)));
-  console.log('(plumbing OK if this ran cleanly; a real hand clip will populate it.)');
   process.exit(0);
 }
-const sigs = log.map((r) => r.sig);
-const spds = log.map((r) => r.spd);
-const fires = log.filter((r) => r.fire);
+const sigs = handRows.map((r) => r.sig);
+const spds = handRows.map((r) => r.spd);
+const fires = handRows.filter((r) => r.fire);
 const q = (arr, p) => arr.length ? [...arr].sort((a, b) => a - b)[Math.floor(p * (arr.length - 1))] : 0;
-console.log(`frames with hand: ${withHand}`);
 console.log(`signal (fingertip-above-wrist): min ${Math.min(...sigs).toFixed(3)}  max ${Math.max(...sigs).toFixed(3)}  (range = flick depth)`);
 console.log(`peak-speed seen: median ${q(spds, 0.5).toFixed(2)}  p90 ${q(spds, 0.9).toFixed(2)}  max ${Math.max(...spds).toFixed(2)}`);
 console.log(`FIRES: ${fires.length}`);

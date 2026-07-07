@@ -11,7 +11,7 @@
 // The MediaPipe JS is bundled (version-matched); only the wasm + model are
 // fetched from CDN, and only on first enable.
 import { FilesetResolver, HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { decideFlick, LOOKBACK_MS, POWER_CAL, type FlickDecision } from './flick';
+import { FlickDetector, MIN_DROP, type FlickDecision } from './flick';
 
 // Calibration harness hook: when __FLICK_DEBUG__ is set, every detected frame is
 // logged so a recorded flick can be replayed and tuned offline. Off by default.
@@ -43,12 +43,11 @@ export class HandFlickInput {
   private running = false;
   private lastDetect = 0;
   private lastVideoTime = -1;
-  private samples: Array<{ t: number; y: number }> = [];
-  private lastFire = 0;
-  private curSpeed = 0;
+  private detector = new FlickDetector();
+  private curDrop = 0;
   private fireFlash = 0;
   private lastShot = 'Snap wrist to shoot';
-  private lastDecision: FlickDecision = { fire: false, power: 0, speed: 0 };
+  private lastDecision: FlickDecision = { fire: false, power: 0, drop: 0 };
 
   constructor(
     private onFlick: (power: number) => void,
@@ -90,6 +89,11 @@ export class HandFlickInput {
           baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
           numHands: 1,
           runningMode: 'VIDEO',
+          // Loose confidences so the hand keeps tracking through the fast flick
+          // (motion blur otherwise drops detection at the critical moment).
+          minHandDetectionConfidence: 0.3,
+          minHandPresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3,
         });
       }
       this.running = true;
@@ -117,7 +121,7 @@ export class HandFlickInput {
     this.running = false;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
-    this.samples.length = 0;
+    this.detector.reset();
   }
 
   // Drive off the camera's frame callback (≤ camera fps) rather than the render
@@ -142,33 +146,30 @@ export class HandFlickInput {
       // position. Raising the whole arm moves both together → no change → no
       // false shot; only the actual FLICK (fingertip snapping down relative to
       // the hand) drops this value, and its speed is the flick's power.
-      if (hand) this.track(hand[0].y - hand[12].y, now); else { this.samples.length = 0; this.curSpeed = 0; }
-      if (window.__FLICK_DEBUG__ && hand) {
-        (window.__FLICK_LOG__ ??= []).push({
-          t: Math.round(now), wristY: +hand[0].y.toFixed(4), tipY: +hand[12].y.toFixed(4),
-          knuckleY: +hand[9].y.toFixed(4), sig: +(hand[0].y - hand[12].y).toFixed(4),
-          spd: +this.lastDecision.speed.toFixed(3), fire: this.lastDecision.fire, pow: +this.lastDecision.power.toFixed(3),
-        });
+      // On a momentary hand-loss, DON'T wipe the buffer — stale samples age out
+      // via the lookback prune, so a 1-2 frame dropout mid-flick doesn't destroy
+      // the measurement (detection flickers during fast motion).
+      if (hand) this.track(hand[0].y - hand[12].y, now); else this.curDrop = 0;
+      if (window.__FLICK_DEBUG__) {
+        (window.__FLICK_LOG__ ??= []).push(hand ? {
+          t: Math.round(now), vt: +this.video.currentTime.toFixed(3), has: 1,
+          wristY: +hand[0].y.toFixed(4), tipY: +hand[12].y.toFixed(4), knuckleY: +hand[9].y.toFixed(4),
+          sig: +(hand[0].y - hand[12].y).toFixed(4),
+          drop: +this.lastDecision.drop.toFixed(3), fire: this.lastDecision.fire, pow: +this.lastDecision.power.toFixed(3),
+        } : { t: Math.round(now), vt: +this.video.currentTime.toFixed(3), has: 0 });
       }
       this.draw(hand);
     }
     this.schedule();
   }
 
-  // Responsive flick: measure the net upward move + speed over a short lookback;
-  // fire the moment it clears the thresholds (no "wait for release" latency).
-  private track(y: number, now: number): void {
-    this.samples.push({ t: now, y });
-    while (this.samples.length > 1 && now - this.samples[0].t > LOOKBACK_MS) this.samples.shift();
-    const d = decideFlick(this.samples, now, this.lastFire);
+  private track(sig: number, now: number): void {
+    const d = this.detector.feed(sig, now);
     this.lastDecision = d;
-    this.curSpeed = d.speed;
+    this.curDrop = d.drop;
     if (d.fire) {
-      this.lastFire = now;
       this.fireFlash = now;
-      this.lastShot = `flick ${d.speed.toFixed(1)}/s → pow ${d.power.toFixed(2)}`;
-      this.samples.length = 0;
-      this.curSpeed = 0;
+      this.lastShot = `flick ${d.drop.toFixed(2)} → power ${d.power.toFixed(2)}`;
       this.onFlick(d.power);
     }
   }
@@ -201,13 +202,14 @@ export class HandFlickInput {
       this.statusEl.textContent = 'Show your hand ✋';
     }
 
-    // Speed bar (right edge) with a marker where a make (~power 1.0) lands.
-    const norm = Math.max(0, Math.min(1, (this.curSpeed * POWER_CAL) / 1.4));
+    // Flick-drop bar (right edge): fills as your fingertip drops relative to the
+    // hand; a gold tick marks the fire threshold — clear it and it shoots.
+    const norm = Math.max(0, Math.min(1, this.curDrop / 0.5));
     ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(w - 12, 0, 12, h);
-    ctx.fillStyle = norm > 0.62 ? '#34d399' : '#60b6e9';
+    ctx.fillStyle = this.curDrop >= MIN_DROP ? '#34d399' : '#60b6e9';
     ctx.fillRect(w - 12, h - norm * h, 12, norm * h);
-    const makeY = h - (1.0 / 1.4) * h;
-    ctx.fillStyle = '#f4c84b'; ctx.fillRect(w - 12, makeY - 1, 12, 2);
+    const threshY = h - (MIN_DROP / 0.5) * h;
+    ctx.fillStyle = '#f4c84b'; ctx.fillRect(w - 12, threshY - 1, 12, 2);
 
     // Fire flash: green border pulse so a shot is unmistakable.
     if (performance.now() - this.fireFlash < 220) {
