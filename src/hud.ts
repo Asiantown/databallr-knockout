@@ -19,6 +19,10 @@ export class Hud {
     el('hud-alive').innerHTML = `alive <b>${alive}</b> / ${total}`;
   }
 
+  practiceStats(makes: number, attempts: number, pct: number, streak: number, best: number): void {
+    el('hud-alive').innerHTML = `<b>${makes}</b>/${attempts} · ${pct}% &nbsp;·&nbsp; streak <b>${streak}</b> &nbsp;·&nbsp; best <b>${best}</b>`;
+  }
+
   renderLine(entries: LineEntry[]): void {
     el('hud-line').innerHTML = entries
       .map((entry) => {
@@ -71,7 +75,7 @@ export class Hud {
     el('meter-label').textContent = text;
   }
 
-  showStart(onStart: (shooter: Shooter, opponents: number) => void): void {
+  showStart(onStart: (shooter: Shooter, opponents: number, mode: 'knockout' | 'practice') => void): void {
     const overlay = el('overlay');
     overlay.classList.remove('hidden');
     let shooter = PLAYER_CHOICES[0];
@@ -109,7 +113,11 @@ export class Hud {
 
     el('btn-start').onclick = () => {
       overlay.classList.add('hidden');
-      onStart(shooter, count);
+      onStart(shooter, count, 'knockout');
+    };
+    el('btn-practice').onclick = () => {
+      overlay.classList.add('hidden');
+      onStart(shooter, count, 'practice');
     };
   }
 

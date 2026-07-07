@@ -13,6 +13,10 @@ import { HandFlickInput } from './handInput';
 import { Hud } from './hud';
 import { Sfx } from './sfx';
 import { KnockoutGame } from './knockout';
+import { PracticeGame } from './practice';
+
+// Both game modes expose the same surface the loop + inputs need.
+type ActiveGame = { update(dt: number): void; shootAt(power: number): void; snapshot(): unknown };
 
 // Begin fetching the 3D baller + ball GLBs immediately; the game falls back to
 // primitives until they resolve, so this never blocks play.
@@ -80,7 +84,7 @@ composer.addPass(new OutputPass());
 
 const hud = new Hud();
 const sfx = new Sfx();
-let game: KnockoutGame | null = null;
+let game: ActiveGame | null = null;
 
 const muteBtn = document.getElementById('btn-mute') as HTMLButtonElement;
 const renderMute = () => { muteBtn.textContent = sfx.isMuted ? '\u{1F507}' : '\u{1F50A}'; };
@@ -116,9 +120,17 @@ camBtn.onclick = async () => {
   }
 };
 
-hud.showStart((shooter, opponents) => {
-  game = new KnockoutGame(scene, hud, sfx, shooter, opponents);
+hud.showStart((shooter, opponents, mode) => {
+  game = mode === 'practice'
+    ? new PracticeGame(scene, hud, sfx, shooter)
+    : new KnockoutGame(scene, hud, sfx, shooter, opponents);
+  menuBtn.style.display = 'block';
 });
+
+// Menu button (shown during play) — back to the mode chooser.
+const menuBtn = document.getElementById('btn-menu') as HTMLButtonElement;
+menuBtn.style.display = 'none';
+menuBtn.onclick = () => window.location.reload();
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

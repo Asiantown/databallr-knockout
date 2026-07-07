@@ -39,8 +39,9 @@ html, body {
   display: flex; justify-content: space-between; align-items: center;
 }
 #hud-title { font-weight: 850; font-size: 18px; letter-spacing: 0.02em; color: var(--ink); display: flex; align-items: center; gap: 10px; }
-#btn-mute, #btn-cam { pointer-events: auto; background: rgba(13,26,53,0.85); border: 1px solid #263756; border-radius: 7px; font-size: 14px; padding: 3px 7px; cursor: pointer; }
+#btn-mute, #btn-cam, #btn-menu { pointer-events: auto; background: rgba(13,26,53,0.85); border: 1px solid #263756; border-radius: 7px; font-size: 14px; padding: 3px 7px; cursor: pointer; }
 #btn-cam.on { border-color: var(--gold); background: #1b2c52; }
+#btn-menu { font-weight: 900; }
 #hud-title span { color: var(--gold); }
 
 .cam-preview {
@@ -206,6 +207,21 @@ html, body {
   letter-spacing: 0.05em;
   cursor: pointer;
 }
+#btn-practice {
+  display: block;
+  margin: 12px auto 0;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid #37507d;
+  border-radius: 10px;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+#btn-practice:hover { border-color: var(--gold); color: var(--gold); }
+
 .hint { margin-top: 14px; font-size: 12px; color: var(--muted); }
 
 @media (max-width: 640px) {

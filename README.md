@@ -23,6 +23,8 @@ Shoot four ways:
 
 Miss and the ball caroms off the rim — chase the board and hit the **putback** (bigger window, close range). Watch the chaser behind you: they walk up, dribble, and fire at the same rim in real time.
 
+**Practice mode** (🎯 on the start screen): an open court, no opponents — just shoot free throws endlessly with make %, streak, and best-streak tracked. The best place to dial in the webcam wrist-flick. The ⌂ button returns to the menu.
+
 ## Run locally
 
 Requires Node **20.19+ or 22+**.
