@@ -131,7 +131,9 @@ export class HandFlickInput {
       this.lastVideoTime = this.video.currentTime;
       const res = this.landmarker.detectForVideo(this.video, now);
       const hand = res.landmarks?.[0] ?? null;
-      if (hand) this.track(hand[0].y, now); else { this.samples.length = 0; this.curSpeed = 0; }
+      // Track the middle-finger knuckle (9) — the hand center. It travels far
+      // more with a flick than the wrist (0), which barely moves on a wrist snap.
+      if (hand) this.track(hand[9].y, now); else { this.samples.length = 0; this.curSpeed = 0; }
       this.draw(hand);
     }
     this.schedule();
@@ -169,8 +171,8 @@ export class HandFlickInput {
       const py = (i: number) => hand[i].y * h;
       ctx.strokeStyle = 'rgba(96,182,233,0.9)'; ctx.lineWidth = 2;
       for (const [a, b] of BONES) { ctx.beginPath(); ctx.moveTo(px(a), py(a)); ctx.lineTo(px(b), py(b)); ctx.stroke(); }
-      ctx.fillStyle = '#f4c84b';
-      ctx.beginPath(); ctx.arc(px(0), py(0), 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f4c84b'; // marker on the tracked point (middle knuckle)
+      ctx.beginPath(); ctx.arc(px(9), py(9), 6, 0, Math.PI * 2); ctx.fill();
       this.statusEl.textContent = this.lastShot;
     } else {
       this.statusEl.textContent = 'Show your hand ✋';

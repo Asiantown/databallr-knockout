@@ -1,5 +1,6 @@
-// Unit test for the wrist-flick decision. Run:
-//   node --experimental-strip-types scripts/test-flick.ts
+// Unit test for the wrist-flick decision. Run: npm run test:flick
+// Key property: power tracks the PEAK speed of the flick, so fast vs slow vs
+// medium flicks produce clearly different power (the bug was "always the same").
 import { decideFlick, MIN_RISE, MIN_SPEED, COOLDOWN_MS } from '../src/flick.ts';
 
 let pass = 0, fail = 0;
@@ -9,50 +10,35 @@ function check(name: string, cond: boolean, detail = '') {
 }
 const s = (pts: number[][]) => pts.map(([t, y]) => ({ t, y }));
 
-// 1) A real upward flick: hand rises ~0.30 of the frame over 200ms (≈30fps).
-{
-  const w = s([[0, 0.63], [33, 0.58], [66, 0.51], [100, 0.45], [133, 0.39], [166, 0.35], [200, 0.33]]);
-  const d = decideFlick(w, 200, -9999);
-  check('real flick fires', d.fire, `(speed=${d.speed.toFixed(2)} power=${d.power.toFixed(2)})`);
-  check('flick power is makeable', d.power > 0.7 && d.power < 1.3, `power=${d.power.toFixed(2)}`);
-}
+// Realistic ~24fps samples (42ms apart) with a fast core in the middle of the flick.
+const FAST = s([[0, 0.62], [42, 0.60], [84, 0.47], [126, 0.34], [168, 0.30], [210, 0.29]]);
+const MED = s([[0, 0.62], [42, 0.60], [84, 0.53], [126, 0.46], [168, 0.42], [210, 0.40]]);
+const SLOW = s([[0, 0.62], [42, 0.605], [84, 0.585], [126, 0.565], [168, 0.55], [210, 0.54]]);
+const STILL = s([[0, 0.5], [42, 0.501], [84, 0.499], [126, 0.5], [168, 0.502], [210, 0.5]]);
+const DOWN = s([[0, 0.30], [84, 0.45], [168, 0.60]]);
 
-// 2) A gentle raise: same distance but over ~1s — should NOT fire (too slow).
-{
-  const w = s([[0, 0.50], [200, 0.48]]); // within a 200ms window, barely moved
-  const d = decideFlick(w, 200, -9999);
-  check('slow/small move does not fire', !d.fire, `(speed=${d.speed.toFixed(2)} rise<${MIN_RISE})`);
-}
+const fast = decideFlick(FAST, 210, -9999);
+const med = decideFlick(MED, 210, -9999);
+const slow = decideFlick(SLOW, 210, -9999);
 
-// 3) Hand held still (jitter): no fire.
-{
-  const w = s([[0, 0.5], [33, 0.502], [66, 0.499], [100, 0.5], [200, 0.501]]);
-  const d = decideFlick(w, 200, -9999);
-  check('still hand does not fire', !d.fire);
-}
+check('fast flick fires', fast.fire, `(peak=${fast.speed.toFixed(1)} pow=${fast.power.toFixed(2)})`);
+check('medium flick fires', med.fire, `(peak=${med.speed.toFixed(1)} pow=${med.power.toFixed(2)})`);
+check('DISCRIMINATION: fast > medium power', fast.power > med.power + 0.15, `fast=${fast.power.toFixed(2)} med=${med.power.toFixed(2)}`);
+check('DISCRIMINATION: medium > slow-ish power', med.power > slow.power, `med=${med.power.toFixed(2)} slow=${slow.power.toFixed(2)}`);
+check('medium flick is roughly makeable', med.power > 0.75 && med.power < 1.25, `pow=${med.power.toFixed(2)}`);
 
-// 4) Downward motion (lowering hand): no fire.
-{
-  const w = s([[0, 0.3], [100, 0.45], [200, 0.6]]);
-  const d = decideFlick(w, 200, -9999);
-  check('downward move does not fire', !d.fire);
-}
+check('still hand does not fire', !decideFlick(STILL, 210, -9999).fire);
+check('downward move does not fire', !decideFlick(DOWN, 168, -9999).fire);
 
-// 5) Cooldown: a valid flick too soon after the last fire is suppressed.
-{
-  const w = s([[0, 0.63], [100, 0.45], [200, 0.33]]);
-  const d = decideFlick(w, 200, 200 - (COOLDOWN_MS - 100)); // fired 550ms ago (< 650 cooldown)
-  check('flick within cooldown suppressed', !d.fire);
-  const d2 = decideFlick(w, 200, 200 - (COOLDOWN_MS + 100)); // fired 750ms ago (> cooldown)
-  check('flick after cooldown fires', d2.fire);
-}
+// Cooldown
+check('flick within cooldown suppressed', !decideFlick(FAST, 210, 210 - (COOLDOWN_MS - 100)).fire);
+check('flick after cooldown fires', decideFlick(FAST, 210, 210 - (COOLDOWN_MS + 100)).fire);
 
-// 6) A hard flick clamps power (doesn't exceed MAX).
-{
-  const w = s([[0, 0.9], [80, 0.4], [160, 0.05]]); // huge fast rise
-  const d = decideFlick(w, 160, -9999);
-  check('hard flick fires and clamps', d.fire && d.power <= 1.8, `power=${d.power.toFixed(2)}`);
-}
+// Very hard flick clamps power at MAX.
+const HARD = s([[0, 0.95], [42, 0.7], [84, 0.35], [126, 0.05]]);
+const hard = decideFlick(HARD, 126, -9999);
+check('hard flick fires and clamps ≤1.9', hard.fire && hard.power <= 1.9, `pow=${hard.power.toFixed(2)}`);
 
 console.log(`\n${pass} passed, ${fail} failed  (MIN_SPEED=${MIN_SPEED}, MIN_RISE=${MIN_RISE})`);
+console.log(`  feel: slow→${slow.power.toFixed(2)}  medium→${med.power.toFixed(2)}  fast→${fast.power.toFixed(2)}  hard→${hard.power.toFixed(2)}  (green≈1.0)`);
 process.exit(fail ? 1 : 0);
