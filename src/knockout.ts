@@ -135,6 +135,13 @@ export class KnockoutGame {
     this.refreshHud();
   }
 
+  // QA-only: fire the user's shot at an exact power (bypasses input timing,
+  // which is unreliable under headless software rendering). No effect unless the
+  // user is currently aiming/putback — same guard as a real flick.
+  testShoot(power: number): void {
+    this.userFlick(power);
+  }
+
   snapshot(): GameStateSnapshot {
     const user = this.userPlayer();
     return {

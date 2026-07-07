@@ -120,7 +120,7 @@ declare global {
       geometries: () => number;
       frames: () => number;
     };
-    __THREE_GAME_TEST_HOOKS__?: { state: () => unknown };
+    __THREE_GAME_TEST_HOOKS__?: { state: () => unknown; shoot: (power: number) => void };
   }
 }
 window.__THREE_GAME_DIAGNOSTICS__ = {
@@ -134,4 +134,5 @@ window.__THREE_GAME_DIAGNOSTICS__ = {
 };
 window.__THREE_GAME_TEST_HOOKS__ = {
   state: () => game?.snapshot() ?? null,
+  shoot: (power: number) => game?.testShoot(power),
 };
