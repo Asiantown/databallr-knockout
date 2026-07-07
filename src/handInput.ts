@@ -11,7 +11,13 @@
 // The MediaPipe JS is bundled (version-matched); only the wasm + model are
 // fetched from CDN, and only on first enable.
 import { FilesetResolver, HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { decideFlick, LOOKBACK_MS, POWER_CAL } from './flick';
+import { decideFlick, LOOKBACK_MS, POWER_CAL, type FlickDecision } from './flick';
+
+// Calibration harness hook: when __FLICK_DEBUG__ is set, every detected frame is
+// logged so a recorded flick can be replayed and tuned offline. Off by default.
+declare global {
+  interface Window { __FLICK_DEBUG__?: boolean; __FLICK_LOG__?: Array<Record<string, number | boolean>> }
+}
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
@@ -42,6 +48,7 @@ export class HandFlickInput {
   private curSpeed = 0;
   private fireFlash = 0;
   private lastShot = 'Snap wrist to shoot';
+  private lastDecision: FlickDecision = { fire: false, power: 0, speed: 0 };
 
   constructor(
     private onFlick: (power: number) => void,
@@ -136,6 +143,13 @@ export class HandFlickInput {
       // false shot; only the actual FLICK (fingertip snapping down relative to
       // the hand) drops this value, and its speed is the flick's power.
       if (hand) this.track(hand[0].y - hand[12].y, now); else { this.samples.length = 0; this.curSpeed = 0; }
+      if (window.__FLICK_DEBUG__ && hand) {
+        (window.__FLICK_LOG__ ??= []).push({
+          t: Math.round(now), wristY: +hand[0].y.toFixed(4), tipY: +hand[12].y.toFixed(4),
+          knuckleY: +hand[9].y.toFixed(4), sig: +(hand[0].y - hand[12].y).toFixed(4),
+          spd: +this.lastDecision.speed.toFixed(3), fire: this.lastDecision.fire, pow: +this.lastDecision.power.toFixed(3),
+        });
+      }
       this.draw(hand);
     }
     this.schedule();
@@ -147,6 +161,7 @@ export class HandFlickInput {
     this.samples.push({ t: now, y });
     while (this.samples.length > 1 && now - this.samples[0].t > LOOKBACK_MS) this.samples.shift();
     const d = decideFlick(this.samples, now, this.lastFire);
+    this.lastDecision = d;
     this.curSpeed = d.speed;
     if (d.fire) {
       this.lastFire = now;
