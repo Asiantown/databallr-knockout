@@ -375,17 +375,20 @@ export class KnockoutGame {
 
   private handleMake(maker: Player): void {
     if (this.over) return;
-    const holders = this.holders();
-    const other = holders.find((p) => p !== maker && p.possessionStart !== null);
+    const holders = this.holders(); // [ahead (front of line), behind]
+    const ahead = holders[0];
+    const behind = holders[1];
 
-    // The later possession knocks out the earlier one.
-    if (
-      other &&
-      maker.possessionStart !== null &&
-      other.possessionStart !== null &&
-      maker.possessionStart > other.possessionStart
-    ) {
-      this.eliminate(other);
+    // Real playground knockout: the player BEHIND you knocks you out by scoring
+    // first. So if the maker is the behind holder and the ahead holder is still
+    // shooting (hasn't scored yet), the ahead holder is out. If the ahead holder
+    // makes, they're safe and simply pass the ball on — no elimination.
+    //
+    // (Positional, NOT possession-timestamp based: timestamps tie at game start
+    // and let two always-making players leapfrog forever — the final 1v1 would
+    // never resolve.)
+    if (maker === behind && ahead && ahead !== maker && ahead.possessionStart !== null) {
+      this.eliminate(ahead);
       if (this.over) return;
     }
 
