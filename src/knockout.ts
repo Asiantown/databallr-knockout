@@ -18,6 +18,7 @@ import { AI_SHOOT_SPOTS, RELEASE_POINT, RIM_CENTER, RUN_SPEED, WALK_SPEED, build
 import { FlickInput } from './input';
 import { Hud } from './hud';
 import { Sfx } from './sfx';
+import { spawnSplash } from './effects';
 import { Shooter, bandHalfwidth, pickOpponents } from './shooters';
 
 type PlayerPhase = 'idle' | 'aiming' | 'flight' | 'rebounding' | 'putback';
@@ -86,7 +87,7 @@ export class KnockoutGame {
     this.scene = scene;
     this.ball = new BallFlight(scene, {
       onArrive: (result) => {
-        if (result.made) this.sfx.swish();
+        if (result.made) { this.sfx.swish(); spawnSplash(this.scene, RIM_CENTER); }
         else if (result.outcome !== 'airball') this.sfx.rim();
       },
       onBounce: () => this.sfx.bounce(),
@@ -188,7 +189,7 @@ export class KnockoutGame {
     if (!player.ball) {
       player.ball = new BallFlight(this.scene, {
         onArrive: (result) => {
-          if (result.made) this.sfx.swish(AI_VOLUME);
+          if (result.made) { this.sfx.swish(AI_VOLUME); spawnSplash(this.scene, RIM_CENTER); }
           else if (result.outcome !== 'airball') this.sfx.rim(AI_VOLUME);
         },
         onBounce: () => this.sfx.bounce(AI_VOLUME),

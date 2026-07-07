@@ -33,7 +33,9 @@ function flightTarget(result: ShotResult, from: THREE.Vector3): FlightTarget {
   const jitterX = (Math.random() - 0.5) * 0.3;
   const distanceScale = Math.max(0.45, from.distanceTo(RIM_CENTER) / 13.5);
   const time = 0.95 * Math.sqrt(distanceScale);
-  const apex = RIM_CENTER.y + 4.5 * distanceScale + 1.5;
+  // Keep the apex low enough that the ball stays within the frame's top edge
+  // (camera y≈8.4, FOV 50) rather than arcing out of view mid-flight.
+  const apex = RIM_CENTER.y + 2.4 * distanceScale + 1.0;
   switch (result.outcome) {
     case 'splash':
       return { point: new THREE.Vector3(jitterX * 0.4, RIM_CENTER.y, RIM_CENTER.z), time, apex };

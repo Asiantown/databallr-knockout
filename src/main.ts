@@ -8,6 +8,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { buildCourt, RIM_CENTER } from './court';
 import { loadCharacters } from './characters';
+import { updateEffects } from './effects';
 import { Hud } from './hud';
 import { Sfx } from './sfx';
 import { KnockoutGame } from './knockout';
@@ -103,6 +104,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min((now - lastT) / 1000, 0.05);
   lastT = now;
   game?.update(dt);
+  updateEffects(dt);
   composer.render();
   frameCount += 1;
 });
