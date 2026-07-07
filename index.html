@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Free-throw KNOCKOUT vs real NBA shooters. Flick to shoot - your make window is your player's real career FT%." />
+    <title>databallr KNOCKOUT</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8F%80%3C/text%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="./assets/index-Do1-aMBi.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BrPzz7pP.css">
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+    <div id="hud">
+      <div id="hud-top">
+        <div id="hud-title">databallr <span>KNOCKOUT</span> <button id="btn-mute" aria-label="Toggle sound">🔊</button><button id="btn-cam" aria-label="Toggle wrist-flick (webcam)" title="Wrist-flick: off">📷</button><button id="btn-menu" aria-label="Back to menu" title="Menu">⌂</button></div>
+        <div id="hud-alive"></div>
+      </div>
+      <div id="hud-line"></div>
+      <div id="hud-message"></div>
+      <div id="hud-status"></div>
+      <div id="hud-meter">
+        <div id="meter-track">
+          <div id="meter-band"></div>
+          <div id="meter-fill"></div>
+          <div id="meter-tick"></div>
+        </div>
+        <div id="meter-label">flick up · two-finger swipe · hold space</div>
+      </div>
+      <div id="overlay">
+        <div id="overlay-card">
+          <h1>databallr <span>KNOCKOUT</span></h1>
+          <p class="tagline">Free-throw knockout against real NBA shooters. Your make window is your player's real career FT%.</p>
+          <div class="pick-label">SHOOT AS</div>
+          <div id="pick-shooter"></div>
+          <div class="pick-label">OPPONENTS</div>
+          <div id="pick-count"></div>
+          <button id="btn-start">START</button>
+          <button id="btn-practice" class="ghost">🎯 Practice — open court</button>
+          <p class="hint">Shoot with a quick upward flick (mouse or finger), a two-finger trackpad swipe, or hold SPACE and release. Land in the green window. New: tap 📷 (top-left) to shoot with a real <b>wrist flick</b> on your webcam — <b>Practice</b> is the best place to dial it in.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
