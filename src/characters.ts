@@ -58,14 +58,19 @@ export function loadCharacters(): void {
   let charDone = false;
   let ballDone = false;
   const check = () => { if (charDone && ballDone) { ready = true; readyCbs.splice(0).forEach((cb) => cb()); } };
+  // Base-relative, NOT root-absolute: on GitHub Pages the app is served under a
+  // subpath (/databallr-knockout/), so a leading "/models/..." 404s and the game
+  // would silently fall back to capsules. import.meta.env.BASE_URL is Vite's
+  // configured base ('./'), which resolves correctly at any deploy path.
+  const base = import.meta.env.BASE_URL;
   loader.load(
-    '/models/player_a.glb',
+    `${base}models/player_a.glb`,
     (g) => { charTemplate = fit(g.scene, 4.0, Math.PI / 2); charDone = true; check(); },
     undefined,
     () => { charDone = true; check(); }, // failed — fallback capsules
   );
   loader.load(
-    '/models/basketball.glb',
+    `${base}models/basketball.glb`,
     (g) => { ballTemplate = fitMax(g.scene, 0.9); ballDone = true; check(); },
     undefined,
     () => { ballDone = true; check(); }, // failed — fallback sphere
