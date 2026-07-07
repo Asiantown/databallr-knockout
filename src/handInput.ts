@@ -41,7 +41,7 @@ export class HandFlickInput {
   private lastFire = 0;
   private curSpeed = 0;
   private fireFlash = 0;
-  private lastShot = 'Flick UP to shoot';
+  private lastShot = 'Snap wrist to shoot';
 
   constructor(
     private onFlick: (power: number) => void,
@@ -58,7 +58,7 @@ export class HandFlickInput {
     this.canvas.width = 240; this.canvas.height = 180;
     this.statusEl = document.createElement('div');
     this.statusEl.className = 'cam-status';
-    this.statusEl.textContent = 'Flick UP to shoot';
+    this.statusEl.textContent = 'Snap wrist to shoot';
     this.wrap.append(this.canvas, this.statusEl);
     document.getElementById('hud')?.appendChild(this.wrap);
     this.ctx = this.canvas.getContext('2d')!;
@@ -87,7 +87,7 @@ export class HandFlickInput {
       }
       this.running = true;
       this.wrap.style.display = 'block';
-      this.statusEl.textContent = 'Flick UP to shoot';
+      this.statusEl.textContent = 'Snap wrist to shoot';
       this.onActive(true);
       this.schedule();
       return true;
@@ -131,9 +131,11 @@ export class HandFlickInput {
       this.lastVideoTime = this.video.currentTime;
       const res = this.landmarker.detectForVideo(this.video, now);
       const hand = res.landmarks?.[0] ?? null;
-      // Track the middle-finger knuckle (9) — the hand center. It travels far
-      // more with a flick than the wrist (0), which barely moves on a wrist snap.
-      if (hand) this.track(hand[9].y, now); else { this.samples.length = 0; this.curSpeed = 0; }
+      // Track the fingertip's height ABOVE the wrist (12 vs 0), not its screen
+      // position. Raising the whole arm moves both together → no change → no
+      // false shot; only the actual FLICK (fingertip snapping down relative to
+      // the hand) drops this value, and its speed is the flick's power.
+      if (hand) this.track(hand[0].y - hand[12].y, now); else { this.samples.length = 0; this.curSpeed = 0; }
       this.draw(hand);
     }
     this.schedule();
@@ -169,10 +171,16 @@ export class HandFlickInput {
     if (hand) {
       const px = (i: number) => (1 - hand[i].x) * w;
       const py = (i: number) => hand[i].y * h;
-      ctx.strokeStyle = 'rgba(96,182,233,0.9)'; ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(96,182,233,0.55)'; ctx.lineWidth = 2;
       for (const [a, b] of BONES) { ctx.beginPath(); ctx.moveTo(px(a), py(a)); ctx.lineTo(px(b), py(b)); ctx.stroke(); }
-      ctx.fillStyle = '#f4c84b'; // marker on the tracked point (middle knuckle)
-      ctx.beginPath(); ctx.arc(px(9), py(9), 6, 0, Math.PI * 2); ctx.fill();
+      // The "flick lever": wrist (0) → fingertip (12). We track its vertical
+      // length; a fast collapse of it = a flick. Snap the fingertip down.
+      ctx.strokeStyle = '#f4c84b'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(px(0), py(0)); ctx.lineTo(px(12), py(12)); ctx.stroke();
+      ctx.fillStyle = '#60b6e9';
+      ctx.beginPath(); ctx.arc(px(0), py(0), 5, 0, Math.PI * 2); ctx.fill(); // wrist
+      ctx.fillStyle = '#f4c84b';
+      ctx.beginPath(); ctx.arc(px(12), py(12), 7, 0, Math.PI * 2); ctx.fill(); // fingertip
       this.statusEl.textContent = this.lastShot;
     } else {
       this.statusEl.textContent = 'Show your hand ✋';
